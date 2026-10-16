@@ -17,7 +17,10 @@ done
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 src="$repo_root/skill"
-snippet="$repo_root/instructions/AGENTS.md"
+# 片段用 .template 扩展名：若直接叫 AGENTS.md，别人把本仓库 clone 进工作区时，DSH 会把它
+# 当成那个目录的指令自动注入（已实测踩到）。这里仍向下兼容旧的 AGENTS.md 布局。
+snippet="$repo_root/instructions/AGENTS.md.template"
+if [ ! -f "$snippet" ]; then snippet="$repo_root/instructions/AGENTS.md"; fi
 skill_name="context-recap"
 
 begin_marker='<!-- context-recap:begin -->'

@@ -7,6 +7,17 @@
 
 ---
 
+## 快速开始（拿到别人的仓库）
+
+```powershell
+git clone https://github.com/856tangbin/dsh-context-recap.git
+cd dsh-context-recap
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install.ps1 -GlobalInstruction
+```
+
+装完**新开一个对话**、提一个**实质任务**，看右侧边栏有没有出现「问题背景」标签页。
+细节、前提检查和 macOS/Linux 写法见下面的[安装](#安装)一节。
+
 ## 它解决什么问题
 
 人做大模型在做的事时也需要背景。当你同时挂几个 Agent 跑任务，它们动辄半小时到几小时才回，
@@ -92,7 +103,7 @@ sh scripts/install.sh                        # 只装技能
 
 - 把 `skill/` 复制到 `~/.dsh/skills/context-recap/`；已存在时先备份到 `~/.dsh/skills-backup/`
   （**不能**备份在 `skills/` 里 —— 那下面每个子目录都会被当成一个技能扫描）。
-- `-GlobalInstruction` / `--global-instruction`：把 `instructions/AGENTS.md` 的内容合并进
+- `-GlobalInstruction` / `--global-instruction`：把 `instructions/AGENTS.md.template` 的内容合并进
   `~/.dsh/AGENTS.md`，用 `<!-- context-recap:begin -->` / `<!-- context-recap:end -->` 标记包住。
   **幂等**：重复执行是原地替换，不会叠加；你原有的全局指令会被保留在后面。
   不想要了，删掉这两个标记之间的内容即可。
@@ -100,15 +111,15 @@ sh scripts/install.sh                        # 只装技能
 ### 方式二：手工
 
 1. 把 `skill/` 复制成 `~/.dsh/skills/context-recap/`（必须含 `SKILL.md`）。
-2. 把 `instructions/AGENTS.md` 的内容追加进 `~/.dsh/AGENTS.md`。
+2. 把 `instructions/AGENTS.md.template` 的内容追加进 `~/.dsh/AGENTS.md`。
 
 ### 只想给某一个项目用？
 
 DSH 也会读**工作区里**的 `AGENTS.md`，并把它作为该目录范围的指令注入。所以只想给某个项目装上时，
-把 `instructions/AGENTS.md` 复制成 `<项目根>/AGENTS.md` 就行，不必动全局配置。
+把 `instructions/AGENTS.md.template` 复制成 `<项目根>/AGENTS.md` 就行，不必动全局配置。
 
-（本仓库自己就演示了这点：`dsh-context-recap/instructions/AGENTS.md` 被 DSH 识别为
-`dsh-context-recap\instructions` 目录范围的指令。）
+（片段之所以用 `.template` 扩展名，正是这条规则的反面：它一旦叫 `AGENTS.md`，别人把本仓库
+clone 进工作区时，DSH 会当场把它当成那个目录的指令自动注入 —— 这是实测踩到过的副作用。）
 
 ### 前提检查
 
@@ -172,7 +183,7 @@ dsh-context-recap/
 │   └── references/
 │       └── recap-format.md         # 模板、正例、反例、长度参考
 ├── instructions/
-│   └── AGENTS.md                   # 全局指令片段（声明"每轮都要做"这个默认行为）
+│   └── AGENTS.md.template          # 全局指令片段（声明"每轮都要做"这个默认行为）
 ├── scripts/
 │   ├── install.ps1                 # Windows 安装（-GlobalInstruction 开关）
 │   └── install.sh                  # macOS / Linux 安装（--global-instruction 开关）
@@ -203,6 +214,9 @@ dsh-context-recap/
 - 不要把目标路径拼进 `sed` 表达式：Windows 路径里的 `\1`（如 `C:\Users\17791`）会被当成反向
   引用，报 `Invalid back reference`。
 - 安装脚本的备份目录必须在 `skills/` **之外**。
+- `instructions/AGENTS.md.template` **必须保留 `.template` 扩展名**：DSH 会把工作区里任何
+  名为 `AGENTS.md` 的文件当作该目录范围的指令自动注入，改名是为了不让别人 clone 本仓库时
+  被动加载它。
 - `scripts/install.ps1` 未签名。调用方用 `powershell -ExecutionPolicy Bypass -File` 最稳；
   直接 `& .\scripts\install.ps1` 在部分环境下会被 `PSSecurityException` 拦下（实测过
   `RemoteSigned` 下也报「未对文件进行数字签名」）。

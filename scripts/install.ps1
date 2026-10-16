@@ -21,7 +21,10 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir
 $src = Join-Path $repoRoot 'skill'
-$snippet = Join-Path $repoRoot 'instructions\AGENTS.md'
+# 片段用 .template 扩展名：若直接叫 AGENTS.md，别人把本仓库 clone 进工作区时，DSH 会把它
+# 当成那个目录的指令自动注入（已实测踩到）。这里仍向下兼容旧的 AGENTS.md 布局。
+$snippet = Join-Path $repoRoot 'instructions\AGENTS.md.template'
+if (-not (Test-Path $snippet)) { $snippet = Join-Path $repoRoot 'instructions\AGENTS.md' }
 $skillName = 'context-recap'
 
 $beginMarker = '<!-- context-recap:begin -->'
