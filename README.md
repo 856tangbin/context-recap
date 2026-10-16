@@ -9,15 +9,15 @@
 
 ```powershell
 # Windows
-git clone https://github.com/856tangbin/dsh-context-recap.git
-cd dsh-context-recap
+git clone https://github.com/856tangbin/context-recap.git
+cd context-recap
 powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -GlobalInstruction
 ```
 
 ```sh
 # macOS / Linux
-git clone https://github.com/856tangbin/dsh-context-recap.git
-cd dsh-context-recap
+git clone https://github.com/856tangbin/context-recap.git
+cd context-recap
 sh install.sh --global-instruction
 ```
 
