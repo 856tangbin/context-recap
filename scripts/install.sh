@@ -38,7 +38,9 @@ cp -R "$src/." "$dest/"
 
 echo ""
 echo "已安装。清单："
-find "$dest" -type f | sed "s|^$dest/|  |"
+# 不要把 $dest 拼进 sed 表达式：Windows 路径里的 \1（例如 \17791）会被当成反向引用，
+# sed 报 "Invalid back reference" 并让 set -e 以退出码 1 结束脚本。先 cd 再用相对路径。
+( cd "$dest" && find . -type f | sed 's|^\./|  |' )
 
 echo ""
 echo "接下来检查两件事："
