@@ -1,12 +1,12 @@
 ﻿<#
-  安装 context-recap：技能 +（可选）全局指令。
+  安装 context-recap 技能。
   用法：
-    pwsh -File scripts/install.ps1                       # 只装技能
-    pwsh -File scripts/install.ps1 -GlobalInstruction    # 装技能 + 写全局指令 $DshHome\AGENTS.md
+    powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
+    powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -GlobalInstruction
 
-  注意：本文件含中文，必须保存为 **UTF-8 with BOM**。
-  Windows PowerShell 5.1 会把无 BOM 的 UTF-8 当 ANSI 读：不仅乱码，成对的 GBK 字节还会吃掉
-  行尾引号与换行，把下一行整行吞进字符串字面量。改动后请确认 BOM 仍在。
+  注意：本文件含中文，必须保存为 UTF-8 with BOM。Windows PowerShell 5.1 会把无 BOM 的 UTF-8
+  当 ANSI 读：不仅乱码，成对的 GBK 字节还会吃掉行尾引号与换行，把下一行整行吞进字符串字面量。
+  改动后请确认 BOM 仍在。
 #>
 [CmdletBinding()]
 param(
@@ -18,31 +18,20 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Split-Path -Parent $scriptDir
-$src = Join-Path $repoRoot 'skill'
-# 片段用 .template 扩展名：若直接叫 AGENTS.md，别人把本仓库 clone 进工作区时，DSH 会把它
-# 当成那个目录的指令自动注入（已实测踩到）。这里仍向下兼容旧的 AGENTS.md 布局。
-$snippet = Join-Path $repoRoot 'instructions\AGENTS.md.template'
-if (-not (Test-Path $snippet)) { $snippet = Join-Path $repoRoot 'instructions\AGENTS.md' }
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $skillName = 'context-recap'
-
+$snippet = Join-Path $root 'AGENTS.md.template'
 $beginMarker = '<!-- context-recap:begin -->'
 $endMarker = '<!-- context-recap:end -->'
 
-if (-not (Test-Path (Join-Path $src 'SKILL.md'))) {
-  throw "找不到技能源目录（缺少 SKILL.md）：$src"
-}
-if (-not (Test-Path $snippet)) {
-  throw "找不到全局指令片段：$snippet"
-}
+if (-not (Test-Path (Join-Path $root 'SKILL.md'))) { throw "找不到 SKILL.md：$root" }
+if (-not (Test-Path $snippet)) { throw "找不到 AGENTS.md.template：$snippet" }
 
 if (-not $DshHome) {
   if ($env:DSH_HOME) { $DshHome = $env:DSH_HOME } else { $DshHome = Join-Path $env:USERPROFILE '.dsh' }
 }
 
-$skillsDir = Join-Path $DshHome 'skills'
-$dest = Join-Path $skillsDir $skillName
+$dest = Join-Path (Join-Path $DshHome 'skills') $skillName
 $globalFile = Join-Path $DshHome 'AGENTS.md'
 
 Write-Host "DSH 主目录 : $DshHome"
@@ -59,8 +48,12 @@ if (Test-Path $dest) {
   Move-Item -LiteralPath $dest -Destination $backup
 }
 
+# 只装技能本体：SKILL.md + references/
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
-Copy-Item -Path (Join-Path $src '*') -Destination $dest -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $root 'SKILL.md') -Destination $dest -Force
+if (Test-Path (Join-Path $root 'references')) {
+  Copy-Item -LiteralPath (Join-Path $root 'references') -Destination $dest -Recurse -Force
+}
 
 Write-Host ''
 Write-Host '已安装技能。清单：' -ForegroundColor Green
@@ -103,7 +96,7 @@ if ($GlobalInstruction) {
 else {
   Write-Host ''
   Write-Host '只装了技能。若要让摘要**每轮必然触发**（不再依赖模型自己决定加载技能），'
-  Write-Host '请加 -GlobalInstruction 重跑，或手工把 instructions\AGENTS.md 的内容合并进：'
+  Write-Host '请加 -GlobalInstruction 重跑，或手工把 AGENTS.md.template 的内容合并进：'
   Write-Host "  $globalFile"
 }
 
@@ -111,5 +104,4 @@ Write-Host ''
 Write-Host '接下来检查两件事：'
 Write-Host '  1. DSH 设置里打开「模型可在侧边栏打开文件（side card）」。'
 Write-Host '  2. 右侧边栏插件（dsh-better-sidebar 或自带侧边栏）处于启用状态。'
-Write-Host '验证时请用一个**实质任务**（例如「看看这个文件夹里有什么」）；'
-Write-Host '按当前配置，寒暄和单步确认会被有意跳过。'
+Write-Host '新开一个对话、提一个**实质任务**验证；按当前配置，寒暄和单步确认会被有意跳过。'

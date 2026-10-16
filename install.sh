@@ -1,37 +1,32 @@
 #!/bin/sh
-# 安装 context-recap：技能 +（可选）全局指令。
+# 安装 context-recap 技能。
 # 用法：
-#   sh scripts/install.sh                       # 只装技能
-#   sh scripts/install.sh --global-instruction  # 装技能 + 写全局指令 $DSH_HOME/AGENTS.md
+#   sh install.sh
+#   sh install.sh --global-instruction
 set -eu
 
 install_global=0
 for arg in "$@"; do
   case "$arg" in
     --global-instruction) install_global=1 ;;
-    --help|-h) echo "用法: sh scripts/install.sh [--global-instruction]"; exit 0 ;;
+    --help|-h) echo "用法: sh install.sh [--global-instruction]"; exit 0 ;;
     *) echo "未知参数：$arg" >&2; exit 2 ;;
   esac
 done
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
-src="$repo_root/skill"
-# 片段用 .template 扩展名：若直接叫 AGENTS.md，别人把本仓库 clone 进工作区时，DSH 会把它
-# 当成那个目录的指令自动注入（已实测踩到）。这里仍向下兼容旧的 AGENTS.md 布局。
-snippet="$repo_root/instructions/AGENTS.md.template"
-if [ ! -f "$snippet" ]; then snippet="$repo_root/instructions/AGENTS.md"; fi
+root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 skill_name="context-recap"
+snippet="$root/AGENTS.md.template"
 
 begin_marker='<!-- context-recap:begin -->'
 end_marker='<!-- context-recap:end -->'
 
-if [ ! -f "$src/SKILL.md" ]; then
-  echo "找不到技能源目录（缺少 SKILL.md）：$src" >&2
+if [ ! -f "$root/SKILL.md" ]; then
+  echo "找不到 SKILL.md：$root" >&2
   exit 1
 fi
 if [ ! -f "$snippet" ]; then
-  echo "找不到全局指令片段：$snippet" >&2
+  echo "找不到 AGENTS.md.template：$snippet" >&2
   exit 1
 fi
 
@@ -57,8 +52,12 @@ if [ -e "$dest" ]; then
   mv "$dest" "$backup"
 fi
 
+# 只装技能本体：SKILL.md + references/
 mkdir -p "$dest"
-cp -R "$src/." "$dest/"
+cp "$root/SKILL.md" "$dest/SKILL.md"
+if [ -d "$root/references" ]; then
+  cp -R "$root/references" "$dest/references"
+fi
 
 echo ""
 echo "已安装技能。清单："
@@ -97,7 +96,7 @@ if [ "$install_global" = "1" ]; then
 else
   echo ""
   echo "只装了技能。若要让摘要**每轮必然触发**（不再依赖模型自己决定加载技能），"
-  echo "请加 --global-instruction 重跑，或手工把 instructions/AGENTS.md 的内容合并进："
+  echo "请加 --global-instruction 重跑，或手工把 AGENTS.md.template 的内容合并进："
   echo "  $global_file"
 fi
 
@@ -105,5 +104,4 @@ echo ""
 echo "接下来检查两件事："
 echo "  1. DSH 设置里打开「模型可在侧边栏打开文件（side card）」。"
 echo "  2. 右侧边栏插件（dsh-better-sidebar 或自带侧边栏）处于启用状态。"
-echo "验证时请用一个**实质任务**（例如「看看这个文件夹里有什么」）；"
-echo "按当前配置，寒暄和单步确认会被有意跳过。"
+echo "新开一个对话、提一个**实质任务**验证；按当前配置，寒暄和单步确认会被有意跳过。"

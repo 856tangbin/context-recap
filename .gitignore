@@ -1,11 +1,9 @@
-# 技能运行时在工作区里生成的摘要文件
-.context-recap.md
+# 技能在本工作区运行时生成的摘要（每个会话一份）
 .context-recap/
 
 # 安装脚本的备份
 *.bak-*
 
-# 编辑器 / 系统噪音
+# 系统噪音
 .DS_Store
 Thumbs.db
-node_modules/
