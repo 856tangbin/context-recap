@@ -71,11 +71,16 @@ DSH 的技能目录每轮都会把所有技能的名字和描述放进系统提�
 
 ```powershell
 # Windows：装技能 + 写全局指令（推荐，完整效果）
-pwsh -File scripts/install.ps1 -GlobalInstruction
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install.ps1 -GlobalInstruction
 
 # 只要技能，不动全局配置
-pwsh -File scripts/install.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
+
+为什么带 `-ExecutionPolicy Bypass`：脚本没有数字签名，而**不同环境下生效的执行策略可能拒绝加载它**。
+实测遇到过即使 `Get-ExecutionPolicy` 显示 `RemoteSigned`，直接 `& .\scripts\install.ps1` 仍然报
+「未对文件进行数字签名」。`Bypass` 只作用于这一个子进程，不改你的机器设置。
+若你更愿意改文件而不是改调用方式，也可以先 `Unblock-File scripts\install.ps1` 再直接运行。
 
 ```sh
 # macOS / Linux
@@ -116,6 +121,20 @@ DSH 也会读**工作区里**的 `AGENTS.md`，并把它作为该目录范围的
 用一个**实质任务**开一轮新对话，例如「看看这个文件夹里有什么」。按当前配置，
 寒暄（`你好`）和单步确认（`回复我:pigon`）会被有意跳过，用它们验证会看不到东西。
 
+## 它花多少 token（实测）
+
+在真实会话（`session-de424f7e`，一轮 8 个 step）上量出来的：
+
+| 项目 | 量 | 是否随轮数累积 |
+|---|---|---|
+| 全局指令块 | 1,300 B / 610 字符，常驻系统提示 | 否（稳定前缀，走缓存） |
+| 额外模型往返 | 约 3 次（取会话标识 / write / sidebar_open） | 否（每轮固定） |
+| 摘要正文 | 约 300–700 output tokens | **是**，作为工具参数永久留在历史里 |
+
+关键事实：**没有额外的"总结" API 调用**，也不会重读一遍历史 —— 摘要由同一个 agent 在同一轮里
+顺手写出来，历史本来就在它的上下文里。那一轮的缓存读高达 228K tokens，但那是 agent 循环里
+每一步重发上下文造成的，**和有没有摘要无关**。
+
 ## 为什么不是插件
 
 | | 技能 + 全局指令（本仓库） | 侧边栏 Tab 插件 |
@@ -134,11 +153,14 @@ DSH 也会读**工作区里**的 `AGENTS.md`，并把它作为该目录范围的
 
 装好之后不需要手动调用。想随时刷新侧边栏，说一句「刷新侧边栏」即可。
 
-摘要固定写在当前工作区根目录的 `.context-recap.md` —— **固定路径**是为了让侧边栏复用同一个
-标签页，而不是每轮新开一个。建议在工作区 `.gitignore` 里加一行：
+摘要**按会话分开写**：当前工作区根目录下的 `.context-recap/<DSH_SESSION_ID>.md`。
+文件名就是 DSH 注入给工具进程的环境变量 `DSH_SESSION_ID`（它同时也是会话日志的目录名）。
+
+**为什么按会话分文件**：侧边栏按路径去重 —— 一个会话一个固定路径，就始终复用同一个标签页；
+而同一工作区里并行跑的其它 Agent 各有各的文件，不会互相覆盖。建议在工作区 `.gitignore` 里加一行：
 
 ```
-.context-recap.md
+.context-recap/
 ```
 
 ## 目录结构
@@ -162,13 +184,13 @@ dsh-context-recap/
 
 ## 已知取舍
 
-- **共用一份摘要**：同一工作区共用一个 `.context-recap.md`，记录的是「这个工作区当前在解决什么」。
-  同一工作区里跑多个互不相关的任务时，技能会改用 `.context-recap/<短标识>.md` 区分。
 - **不自动刷新**：侧边栏 Markdown 预览可能需要点一下刷新；发现内容不更新就说「刷新侧边栏」。
-- **有额外开销**：每个实质回合多一次文件写入和一次 `sidebar_open` 调用 —— 这也是寒暄/单步确认
-  默认跳过、以及你应该用实质任务验证的原因。
+  另外右侧栏没展开时，`sidebar_open` 会**排队**（返回 queued），展开之后才可见。
+- **有额外开销**：每个实质回合多约 3 次模型往返（取会话标识 / 写文件 / `sidebar_open`）加
+  约 300–700 输出 tokens；实测见上一节。这也是寒暄和单步确认默认跳过的原因。
 - **全局指令影响所有会话**：`~/.dsh/AGENTS.md` 是全局的。只想给某个项目用，见上面「只想给
   某一个项目用？」。
+- **`.context-recap/` 会攒文件**：每个会话一个。它们只是临时工作产物，定期清理即可。
 
 ## 开发注意
 
@@ -181,6 +203,9 @@ dsh-context-recap/
 - 不要把目标路径拼进 `sed` 表达式：Windows 路径里的 `\1`（如 `C:\Users\17791`）会被当成反向
   引用，报 `Invalid back reference`。
 - 安装脚本的备份目录必须在 `skills/` **之外**。
+- `scripts/install.ps1` 未签名。调用方用 `powershell -ExecutionPolicy Bypass -File` 最稳；
+  直接 `& .\scripts\install.ps1` 在部分环境下会被 `PSSecurityException` 拦下（实测过
+  `RemoteSigned` 下也报「未对文件进行数字签名」）。
 
 ## License
 
