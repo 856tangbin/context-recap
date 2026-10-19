@@ -19,23 +19,27 @@ The recap is emitted as a Markdown blockquote at the end of the answer body, con
 line, one empty quote line and a four-item list:
 
 ```markdown
-> **问题背景** · 状态：进行中
+> **Context** · Status: in progress
 >
-> - **为什么问这个**：同时启动三个代理排查线上故障，返回延迟均超过三十分钟，事后已遗忘原始诉求。
-> - **目标**：使每轮回答均可呈现该问题的动因与当前完成度。
-> - **现在的进度**：摘要形式已改为行内引用块；技能与安装脚本已同步。
-> - **下一步**：在新会话中提交一项实质性任务并检查输出。
+> - **Why this was asked**: Three agents were started in parallel to triage a production outage; each
+>   took over thirty minutes to return, by which point the original request had been forgotten.
+> - **Objective**: Make the motivation and the completion state of the request visible at the end of
+>   every answer.
+> - **Progress**: The recap format has been changed to an inline blockquote; the skill and the install
+>   scripts are in sync.
+> - **Next step**: Submit a substantive task in a new session and inspect the output.
 ```
 
-The label set above is the one prescribed by `AGENTS.md.template`; the surrounding text is written in
-the language of the conversation.
+The four field labels follow the language of the conversation: the set above is used for replies written
+in English, while Chinese replies use `问题背景` / `为什么问这个` / `目标` / `现在的进度` / `下一步`.
 
 Constraints:
 
 1. The empty quote line (`>`) between the title and the list is mandatory. Markdown merges consecutive
    quote lines into a single paragraph; omitting it collapses the four items into one paragraph.
 2. Each item occupies its own line and consists of one sentence; the block must not exceed five lines.
-3. The status field is one of `进行中` (in progress), `已完成` (completed), `受阻` (blocked).
+3. The status field is one of `in progress`, `completed`, `blocked` (in Chinese replies: `进行中`,
+   `已完成`, `受阻`).
 4. Statements must be verifiable facts, including paths, numbers or verbatim error text; the answer
    body must not be restated.
 5. Heading syntax must not appear inside the block, so that the document outline is unchanged.
