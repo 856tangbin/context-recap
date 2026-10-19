@@ -101,7 +101,5 @@ else {
 }
 
 Write-Host ''
-Write-Host '接下来检查两件事：'
-Write-Host '  1. DSH 设置里打开「模型可在侧边栏打开文件（side card）」。'
-Write-Host '  2. 右侧边栏插件（dsh-better-sidebar 或自带侧边栏）处于启用状态。'
-Write-Host '新开一个对话、提一个**实质任务**验证；按当前配置，寒暄和单步确认会被有意跳过。'
+Write-Host '不需要开侧边栏、也不依赖任何侧边栏插件：摘要就是回答末尾的一段引用块。'
+Write-Host '新开一个对话、提一个**实质任务**验证；寒暄和单步确认会被有意跳过。'
