@@ -5,44 +5,56 @@ English | [简体中文](README.zh-CN.md)
 ## Abstract
 
 `context-recap` is a lightweight skill for DSH (DeepSeek Harness). At the end of every substantive answer
-it appends a structured recap recording the motivation, objective, completion state and next action of
-that turn. Its purpose is to reduce the cost of context loss in long-running tasks and in parallel
-multi-session work: after returning to a session hours later, the user can recover the task context
-without replaying the conversation.
+it writes a structured recap of that turn — motivation, objective, completion state, next action — into
+`.context-recap/<session-id>.md` in the workspace, opens that file in the right-hand sidebar, and leaves
+the answer body untouched — no recap text, no receipt line.
 
-The skill writes no files, does not touch the sidebar and calls no tools. It changes only the textual
-structure of the answer, and therefore requires no additional plugins or permissions.
+The recap therefore stays **visible and durable without consuming model context**: the file lives on disk
+and never enters the conversation history. After returning to a session hours later, the user can read
+the sidebar and recover the task context at a glance. The template and worked examples live in
+`references/recap-format.md`.
 
-## Output Specification
+## How It Works
 
-The recap is emitted as a Markdown blockquote at the end of the answer body, consisting of one title
-line, one empty quote line and a four-item list:
+At the end of every substantive answer:
+
+1. **Read the session id** — `DSH_SESSION_ID` (e.g. `session-85a54419-3338-…`). Read it once per
+   session and remember it; fall back to `_unknown.md` when it cannot be obtained.
+2. **Write the recap** — `.context-recap/<session-id>.md` under the workspace root, 20 lines or fewer.
+   The path is fixed per session, so parallel agents in one workspace never overwrite each other and the
+   sidebar reuses a single tab per session.
+3. **Show it** — call `sidebar_open` with that path and `title` set to the recap heading.
+   Do **not** mention the recap in the answer body at all: no paste, no receipt line, no "written to …".
+
+## Recap Format
 
 ```markdown
-> **Context** · Status: in progress
->
-> - **Why this was asked**: Three agents were started in parallel to triage a production outage; each
->   took over thirty minutes to return, by which point the original request had been forgotten.
-> - **Objective**: Make the motivation and the completion state of the request visible at the end of
->   every answer.
-> - **Progress**: The recap format has been changed to an inline blockquote; the skill and the install
->   scripts are in sync.
-> - **Next step**: Submit a substantive task in a new session and inspect the output.
-```
+# Context recap
 
-The four field labels follow the language of the conversation: the set above is used for replies written
-in English, while Chinese replies use `问题背景` / `为什么问这个` / `目标` / `现在的进度` / `下一步`.
+> Last updated: 2026-10-26 10:15 · Status: in progress
+
+## Why this was asked
+One or two sentences on the real-world trigger, not the literal wording of the question.
+
+## Objective
+What must be achieved, and what counts as done.
+
+## Progress
+- Confirmed / done: key conclusions, with numbers, paths, file names.
+- Open / blocked: what is stuck, what is missing.
+
+## Next step
+One to three concrete actions.
+```
 
 Constraints:
 
-1. The empty quote line (`>`) between the title and the list is mandatory. Markdown merges consecutive
-   quote lines into a single paragraph; omitting it collapses the four items into one paragraph.
-2. Each item occupies its own line and consists of one sentence; the block must not exceed five lines.
-3. The status field is one of `in progress`, `completed`, `blocked` (in Chinese replies: `进行中`,
-   `已完成`, `受阻`).
-4. Statements must be verifiable facts, including paths, numbers or verbatim error text; the answer
-   body must not be restated.
-5. Heading syntax must not appear inside the block, so that the document outline is unchanged.
+1. 20 lines or fewer, short sentences, lists allowed.
+2. State facts — numbers, paths, verbatim error text; no adjectives.
+3. The objective must be verifiable ("make X emit Y"), not vague ("do X well").
+4. Status is one of `in progress`, `completed`, `blocked` (in Chinese replies: `进行中`, `已完成`,
+   `受阻`).
+5. Write once — do not read the file back to verify and do not write it twice.
 
 ## Trigger Conditions
 
@@ -52,6 +64,8 @@ following cases:
 - greetings and single-step confirmations that carry no substantive information;
 - intermediate turns of an unfinished task (tool calls not yet converged, results incomplete);
 - an explicit request from the user to skip it.
+
+The user can ask to see it mid-task ("have a look at the sidebar"); rewriting on demand is fine.
 
 ## Installation
 
@@ -75,21 +89,22 @@ sh install.sh --global-instruction
 
 ### Option 2: manual installation
 
-1. Copy `SKILL.md` to `~/.dsh/skills/context-recap/`.
+1. Copy `SKILL.md` and `references/` to `~/.dsh/skills/context-recap/`.
 2. Append the contents of `AGENTS.md.template` to `~/.dsh/AGENTS.md`.
 
 ### Verification
 
-Start a new session, submit a substantive task, and check whether the blockquote appears at the end of
-the answer.
+Start a new session, submit a substantive task, and check that `.context-recap/<session-id>.md` appears
+in the workspace, that the file pops up in the right sidebar, and that the answer body contains no recap
+text at all.
 
-## How It Works
+## How It Is Wired
 
 The behaviour is implemented by two components with distinct responsibilities:
 
 | Component | Location | Responsibility |
 |---|---|---|
-| Skill | `~/.dsh/skills/context-recap/SKILL.md` | Defines the output format, writing requirements and exemptions |
+| Skill | `~/.dsh/skills/context-recap/SKILL.md` | Defines the steps, the file path, the recap format and the exemptions |
 | Global instruction | Marked block in `~/.dsh/AGENTS.md` | Declares the behaviour as default and guarantees per-turn activation |
 
 Installing the skill alone is insufficient. On every turn DSH injects only the skill's identifier and
@@ -102,9 +117,23 @@ The block is delimited by `<!-- context-recap:begin -->` and `<!-- context-recap
 scripts replace the block rather than appending to it, so they are safe to re-run. Removing the block
 disables the behaviour globally.
 
+## Dependencies and Fallbacks
+
+- The sidebar is provided by DSH's **built-in** `sidebar_open` tool; no third-party plugin such as
+  `dsh-better-sidebar` is required.
+- That tool depends on the "model may open files in the sidebar" (side card) setting being enabled.
+- If `sidebar_open` is rejected or unavailable: say why and fall back to a blockquote at the end of the
+  answer; do not retry in a loop.
+- If the workspace is not writable (read-only, or the sandbox rejects `write`): same fallback.
+- If the shell is unavailable and `DSH_SESSION_ID` cannot be read: use `.context-recap/_unknown.md` and
+  do not retry.
+
 ## Scope and Constraints
 
-- No dependency on the sidebar, `dsh-better-sidebar`, the side card setting or any additional plugin.
+- The recap file is a working artifact, not a deliverable: do not `present` it and do not build a
+  directory structure around it.
+- If the workspace is a git repository, suggest adding `.context-recap/` to `.gitignore` the first time
+  the file is created (say it once).
 - Requires a DSH version that supports `AGENTS.md` global instructions and a skill directory.
 - Project-level use: copy `AGENTS.md.template` to `AGENTS.md` at the project root to scope the behaviour
   to a single project. The `.template` extension exists for this reason: were the file named `AGENTS.md`,
@@ -113,23 +142,25 @@ disables the behaviour globally.
 
 ## Cost
 
-Adds approximately 3 to 5 lines of output per substantive answer. Introduces no tool calls, no model
-round-trips and no file writes.
+Per substantive answer: no recap output in the body, one `write` call, one `sidebar_open` call; plus a
+single shell call per session to read `DSH_SESSION_ID`. Recap text stays on disk and consumes no prompt
+tokens.
 
 ## Repository Layout
 
 ```
-SKILL.md              Skill body: output specification, writing requirements, examples
-AGENTS.md.template    Global instruction fragment: declares the default behaviour
-install.ps1           Windows installer
-install.sh            macOS / Linux installer
-README.md             English documentation (default)
-README.zh-CN.md       Simplified Chinese documentation
+SKILL.md                    Skill body: steps, recap format, scope and boundaries
+AGENTS.md.template          Global instruction fragment: declares the default behaviour
+references/recap-format.md  Recap template and worked examples
+install.ps1                 Windows installer
+install.sh                  macOS / Linux installer
+README.md                   English documentation (default)
+README.zh-CN.md             Simplified Chinese documentation
 ```
 
 ## Maintenance Notes
 
-- `SKILL.md` and `AGENTS.md.template` must be UTF-8 without BOM.
+- `SKILL.md`, `AGENTS.md.template` and `references/*.md` must be UTF-8 without BOM.
 - `install.ps1` contains Chinese text and must be saved as UTF-8 with BOM. Windows PowerShell 5.1
   decodes BOM-less UTF-8 as ANSI; paired GBK byte sequences then consume trailing quotes and newlines,
   merging adjacent statements into a string literal.
@@ -140,10 +171,14 @@ README.zh-CN.md       Simplified Chinese documentation
 ## Changelog
 
 - `v0.1.0`: introduced the skill plus global instruction; recaps were written to a workspace file and
-  displayed in the sidebar.
-- `v0.2.0`: the repository was collapsed into a single skill directory, removing the plugin-style layout.
+  displayed in the sidebar (plugin-style layout).
+- `v0.2.0`: the repository was collapsed into a single skill directory, removing the plugin-style layout;
+  the recap path was fixed at `.context-recap/<DSH_SESSION_ID>.md`.
 - `v0.3.0`: recaps moved to an inline blockquote at the end of the answer; sidebar, file writes and all
   external dependencies removed.
+- `v0.4.0`: sidebar mechanism restored — write `.context-recap/<session-id>.md` and show it with
+  `sidebar_open`, leaving the answer body untouched; the sidebar is served by DSH's built-in tool
+  rather than a third-party plugin; shell, sidebar and read-only-workspace fallbacks documented.
 
 ## License
 
