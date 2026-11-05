@@ -119,9 +119,11 @@ disables the behaviour globally.
 
 ## Dependencies and Fallbacks
 
-- The sidebar is provided by DSH's **built-in** `sidebar_open` tool; no third-party plugin such as
-  `dsh-better-sidebar` is required.
-- That tool depends on the "model may open files in the sidebar" (side card) setting being enabled.
+- The `sidebar_open` tool is registered by the sidebar plugin — currently `dsh-better-sidebar`, which also
+  serves the `/sidebar/ws/agent-opens` delivery channel. Without such a plugin the tool does not exist.
+  Verified against `dsh-better-sidebar@0.28.2`.
+- The tool additionally depends on the "model may open files in the sidebar" (side card) setting being
+  enabled.
 - If `sidebar_open` is rejected or unavailable: say why and fall back to a blockquote at the end of the
   answer; do not retry in a loop.
 - If the workspace is not writable (read-only, or the sandbox rejects `write`): same fallback.

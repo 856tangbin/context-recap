@@ -110,8 +110,9 @@ sh install.sh --global-instruction
 
 ## 依赖与降级
 
-- 侧边栏由 DSH **内置** 的 `sidebar_open` 工具提供，不依赖 `dsh-better-sidebar` 等第三方插件。
-- 该工具依赖设置项「模型可在侧边栏打开文件（side card）」为开启状态。
+- `sidebar_open` 工具由侧边栏插件注册提供 —— 目前为 `dsh-better-sidebar`，该插件同时提供
+  `/sidebar/ws/agent-opens` 推送通道；未安装此类插件时该工具不存在。已针对 `dsh-better-sidebar@0.28.2` 验证。
+- 该工具另依赖设置项「模型可在侧边栏打开文件（side card）」为开启状态。
 - 若 `sidebar_open` 被拒绝或不可用：说明原因，并退化为在回复末尾用引用块贴出摘要，不要反复重试。
 - 若工作区不可写（只读 / 沙箱拒绝 `write`）：同样退化为正文引用块，并在回复里说明。
 - 若 shell 不可用、读不到 `DSH_SESSION_ID`：使用 `.context-recap/_unknown.md`，不要重试。
