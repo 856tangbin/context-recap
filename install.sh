@@ -52,11 +52,14 @@ if [ -e "$dest" ]; then
   mv "$dest" "$backup"
 fi
 
-# 只装技能本体：SKILL.md + references/
+# 只装技能本体：SKILL.md + references/ + scripts/
 mkdir -p "$dest"
 cp "$root/SKILL.md" "$dest/SKILL.md"
 if [ -d "$root/references" ]; then
   cp -R "$root/references" "$dest/references"
+fi
+if [ -d "$root/scripts" ]; then
+  cp -R "$root/scripts" "$dest/scripts"
 fi
 
 echo ""
@@ -101,6 +104,8 @@ else
 fi
 
 echo ""
-echo "摘要写进 <工作区>/.context-recap/<会话标识>.md，并用 sidebar_open 在侧边栏显示；正文最多一句话带过。"
+echo "摘要卡片写进 <工作区>/.context-recap/<会话标识>.md，并用 sidebar_open 在侧边栏显示；正文最多一句话带过。"
+echo "看板（可选）：node \"\$HOME/.dsh/skills/context-recap/scripts/board.mjs\""
+echo "           读 $dsh_home/storages/workspace.json 里未归档的会话，生成 <当前目录>/.context-recap/BOARD.md。"
 echo "侧边栏由 DSH 内置的 sidebar_open 提供，不需要任何第三方侧边栏插件。"
 echo "新开一个对话、提一个**实质任务**验证；寒暄和单步确认会被有意跳过。"
