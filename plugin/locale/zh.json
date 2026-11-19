@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "会话看板",
+    "description": "在右侧栏常驻显示所有未归档会话的 context-recap 卡片，按状态排序。",
+    "detail": "docs/DETAIL.md"
+  }
+}

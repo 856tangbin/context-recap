@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Session Board",
+    "description": "A live board of every unarchived Session's context-recap card in the right Sidebar.",
+    "detail": "docs/DETAIL.md"
+  }
+}

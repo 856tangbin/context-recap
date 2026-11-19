@@ -104,8 +104,8 @@ else {
 }
 
 Write-Host ''
-Write-Host '摘要卡片写进 <工作区>\.context-recap\<会话标识>.md，并用 sidebar_open 在侧边栏显示；正文最多一句话带过。'
+Write-Host '摘要卡片写进 <工作区>\.context-recap\<会话标识>.md（看板数据源），正文不再复述、也不弹侧边栏。'
 Write-Host '看板（可选）：node "$env:USERPROFILE\.dsh\skills\context-recap\scripts\board.mjs"'
 Write-Host '           读 ~/.dsh/storages/workspace.json 里未归档的会话，生成 <当前目录>\.context-recap\BOARD.md。'
-Write-Host '侧边栏由 DSH 内置的 sidebar_open 提供，不需要任何第三方侧边栏插件。'
+Write-Host '常驻看板：可选插件在同仓库 plugin/ 目录，用插件的「安装 bundle」指向它即可。'
 Write-Host '新开一个对话、提一个**实质任务**验证；寒暄和单步确认会被有意跳过。'

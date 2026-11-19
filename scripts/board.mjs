@@ -25,6 +25,7 @@
 import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { zstdDecompressSync } from 'node:zlib';
 
 const DAY = 24 * 60 * 60 * 1000;
 const SKIP_PREFIX = ['im:'];
@@ -284,6 +285,68 @@ function collectRecency(home) {
   return map;
 }
 
+const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
+
+/** 会话日志是多帧拼接的 zstd：按魔数切帧逐段解压。 */
+function decodeSessionLog(logPath) {
+  if (!logPath) return '';
+  let buf;
+  try {
+    buf = readFileSync(logPath);
+  } catch {
+    return '';
+  }
+  const starts = [];
+  let at = 0;
+  while ((at = buf.indexOf(ZSTD_MAGIC, at)) !== -1) {
+    starts.push(at);
+    at += 4;
+  }
+  if (!starts.length) return '';
+  const parts = [];
+  for (let k = 0; k < starts.length; k++) {
+    const end = k + 1 < starts.length ? starts[k + 1] : buf.length;
+    try {
+      parts.push(zstdDecompressSync(buf.subarray(starts[k], end)));
+    } catch {
+      /* 跳过坏帧 */
+    }
+  }
+  return Buffer.concat(parts).toString('utf8');
+}
+
+/** 数真正由用户发出的消息（排除 time-context 等系统注入）。 */
+function countUserMessages(logPath) {
+  const text = decodeSessionLog(logPath);
+  if (!text) return 0;
+  let count = 0;
+  for (const line of text.split('\n')) {
+    if (!line) continue;
+    let ev;
+    try {
+      ev = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (ev?.type === 'user/message' && ev?.data?.source?.kind === 'user') count += 1;
+  }
+  return count;
+}
+
+function collectLogPaths(home) {
+  const map = new Map();
+  const root = join(home, 'sessions');
+  for (const outer of safeReaddir(root)) {
+    if (!outer.isDirectory()) continue;
+    const outerPath = join(root, outer.name);
+    for (const inner of safeReaddir(outerPath)) {
+      if (!inner.isDirectory() || !inner.name.startsWith('session-')) continue;
+      map.set(inner.name, join(outerPath, inner.name, 'session.v4.jsonl.zstd'));
+    }
+  }
+  return map;
+}
+
 function readWorkspaceState(home) {
   const file = join(home, 'storages', 'workspace.json');
   if (!existsSync(file)) {
@@ -313,9 +376,11 @@ function readWorkspaceState(home) {
 function buildRows(home, opts, now) {
   const state = readWorkspaceState(home);
   const recency = collectRecency(home);
+  const logPaths = collectLogPaths(home);
   const seen = new Set();
   const rows = [];
   const folded = [];
+  const foldedShort = [];
 
   for (const ws of state.workspaces) {
     const dirOk = Boolean(ws.path) && existsSync(ws.path);
@@ -355,6 +420,10 @@ function buildRows(home, opts, now) {
           pinned: state.pinned.has(sid),
           cardFile: '',
         };
+        if (!opts.all && countUserMessages(logPaths.get(sid)) <= 1) {
+          foldedShort.push(row);
+          continue;
+        }
         if (!opts.all && age !== null && age > opts.missingDays) {
           folded.push(row);
           continue;
@@ -402,7 +471,7 @@ function buildRows(home, opts, now) {
       .sort((a, b) => (b.updated || 0) - (a.updated || 0)),
   };
 
-  return { state, rows, groups, folded, recency };
+  return { state, rows, groups, folded, foldedShort, recency };
 }
 
 // ---------------------------------------------------------------- 渲染
@@ -433,8 +502,8 @@ function renderRow(row, opts, now) {
 }
 
 function renderMarkdown(result, opts, now) {
-  const { state, groups, rows, folded } = result;
-  const openTotal = rows.length + folded.length;
+  const { state, groups, rows, folded, foldedShort } = result;
+  const openTotal = rows.length + folded.length + foldedShort.length;
   const lines = [];
 
   lines.push('# 会话看板');
@@ -470,12 +539,20 @@ function renderMarkdown(result, opts, now) {
     lines.push('');
   }
 
+  if (foldedShort.length) {
+    lines.push(
+      `_另有 ${foldedShort.length} 个空会话或只有一两句话的会话未展开（加 --all 查看）。_`,
+    );
+    lines.push('');
+  }
+
   lines.push('---');
   lines.push(
     '卡片真源：各工作区 `.context-recap/<会话标识>.md`；本文件由 `scripts/board.mjs` 生成，**不要手改**。',
   );
   lines.push(
-    `缺卡会话的活跃度取自会话日志 mtime${opts.all ? '' : `，超过 ${opts.missingDays} 天的折叠为一行统计`}。`,
+    `缺卡会话的活跃度取自会话日志 mtime${opts.all ? '' : `，超过 ${opts.missingDays} 天的折叠为一行统计`}；` +
+      '空会话与只有一两句话的会话默认折叠。',
   );
   lines.push('');
 
@@ -502,7 +579,7 @@ function main() {
       counts: {
         workspaces: result.state.workspaces.length,
         archived: result.state.archived.size,
-        open: result.rows.length + result.folded.length,
+        open: result.rows.length + result.folded.length + result.foldedShort.length,
         blocked: result.groups.blocked.length,
         doing: result.groups.doing.length,
         done: result.groups.done.length,

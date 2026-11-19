@@ -1,0 +1,3 @@
+- insert:
+    - id: context-recap-board
+      name: '@local/context-recap-board'
