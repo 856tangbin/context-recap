@@ -95,6 +95,17 @@ node "$env:USERPROFILE\.dsh\skills\context-recap\scripts\board.mjs"
 
 缺卡片的会话不会凭空编造摘要：看板按会话日志 mtime 兜底活跃度，并提示「去那个会话补一份」。
 
+### 右侧栏常驻看板（可选插件）
+
+想让看板常驻在右侧栏，可以安装配套插件 `context-recap-board`（不随本仓库分发，代码在作者的
+`context-recap-board/` 目录）：
+
+- 安装：`plugin_manager` 的 `install_bundle`，target 填插件目录的绝对路径；安装后刷新页面。
+- 使用：右侧栏 → 引导页「看板」→ 点卡片跳到对应会话，右上角刷新。
+- 数据：与 `board.mjs` 同源 —— 读 `.context-recap/<会话 id>.md` 卡片加 `~/.dsh/storages/workspace.json`
+  的归档集合；不写文件、不调 LLM。
+- 取舍：脚本产出 `BOARD.md` 快照（可提交、可被其它工具读取）；插件是常驻视图（打开即刷新）。
+
 ## 触发条件
 
 - **卡片**：默认于所有实质性回答结束时生成。以下情形跳过且不作说明：纯寒暄、单步确认；

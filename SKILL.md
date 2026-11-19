@@ -117,6 +117,16 @@ node "$env:USERPROFILE\.dsh\skills\context-recap\scripts\board.mjs"
 生成后：`sidebar_open` 打开 `BOARD.md`，`title` 填「会话看板」；正文只用 3–5 行说出结论
 （最该处理的两三件事），不要复述整张表。
 
+### 常驻看板（可选插件）
+
+装了配套插件 `context-recap-board` 时，右侧栏引导页会有「看板」tab，直接读同一套卡片渲染成常驻视图，
+不必跑脚本。两者数据一致，按场景取舍：
+
+- 脚本：产出 `BOARD.md` 快照，适合提交、归档、给别的工具消费；
+- 插件：打开即现算，适合边干活边瞄一眼。
+
+插件不可用不影响技能本身，脚本始终是兜底。
+
 ### 没有 node 时
 
 ```powershell
