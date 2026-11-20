@@ -244,6 +244,10 @@ README.zh-CN.md             Simplified Chinese documentation
   restates the recap; bodies shrank to objective / progress / next step in 10 lines; empty and
   one-message sessions are folded by default (`--all` expands them); the persistent right-sidebar
   board plugin now ships in `plugin/`.
+- `v0.6.1`: board visuals and interaction finalized — dot-and-rail list, green doing / gray done
+  gradient rows, spinner for running sessions, double-click to open, current-session highlight;
+  the done section collapses by default with its toggle above the group and keeps its state across
+  session switches and reloads; sessions without a card are no longer shown.
 
 ## License
 
