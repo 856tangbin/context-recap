@@ -12,8 +12,8 @@
  * Nothing is polled: the page reads on mount, on refresh, and whenever the
  * archived set changes.
  *
- * Five colour-accented timeline layouts are built in; the footer switcher is a
- * design preview.
+ * One timeline layout (dot + rail rows, tinted by status) is the only style;
+ * the guide glyph mirrors it.
  */
 window.__ModuleLoader__.load({
   id: '@local/context-recap-board',
@@ -24,6 +24,30 @@ window.__ModuleLoader__.load({
     const TAB_ID = 'context-recap-board'
     const KIND = 'context-recap-board'
     const STALE_DAYS = 3
+
+    // The guide capsule's glyph: the board's own timeline, at whatever size the
+    // capsule asks for. Ink follows the theme; the live dot keeps the brand green.
+    function BoardGlyph(props) {
+      const size = props && Number.isFinite(props.size) ? props.size : 24
+      const line = { stroke: 'currentColor', strokeLinecap: 'round', fill: 'none' }
+      return h('svg', {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        role: 'img',
+        'aria-label': 'Session board',
+        className: props && props.className,
+        'aria-hidden': true,
+      },
+        h('line', Object.assign({ key: 'spine', x1: 7, y1: 4.6, x2: 7, y2: 19.4, strokeWidth: 1.5, opacity: 0.42 }, line)),
+        h('circle', { key: 'dot-live', cx: 7, cy: 7.2, r: 2.05, fill: '#12aa52', stroke: 'none' }),
+        h('circle', { key: 'dot-doing', cx: 7, cy: 12, r: 2.05, fill: 'currentColor', stroke: 'none' }),
+        h('circle', { key: 'dot-done', cx: 7, cy: 16.8, r: 2.05, fill: 'currentColor', opacity: 0.38, stroke: 'none' }),
+        h('line', Object.assign({ key: 'bar-1', x1: 11.6, y1: 7.2, x2: 18.8, y2: 7.2, strokeWidth: 1.6 }, line)),
+        h('line', Object.assign({ key: 'bar-2', x1: 11.6, y1: 12, x2: 17.8, y2: 12, strokeWidth: 1.6 }, line)),
+        h('line', Object.assign({ key: 'bar-3', x1: 11.6, y1: 16.8, x2: 15.8, y2: 16.8, strokeWidth: 1.6, opacity: 0.42 }, line)),
+      )
+    }
 
     // Card texts are cached across sessions and tab remounts: switching sessions
     // then re-renders instantly, and cards are only re-read when stale.
@@ -52,9 +76,12 @@ window.__ModuleLoader__.load({
       'ui.hideMissing': '收起没有卡片的会话',
       'ui.showDone': '展开已完成',
       'ui.hideDone': '收起已完成',
+      'ui.showScheduled': '展开定时任务',
+      'ui.hideScheduled': '收起定时任务',
       'ui.style': '样式',
       'group.blocked': '阻塞',
       'group.doing': '进行中',
+      'group.scheduled': '定时任务',
       'group.done': '已完成',
       'group.missing': '缺卡片',
       'time.justNow': '刚刚',
@@ -84,9 +111,12 @@ window.__ModuleLoader__.load({
       'ui.hideMissing': 'Hide Sessions without a card',
       'ui.showDone': 'Show done',
       'ui.hideDone': 'Hide done',
+      'ui.showScheduled': 'Show scheduled',
+      'ui.hideScheduled': 'Hide scheduled',
       'ui.style': 'Style',
       'group.blocked': 'Blocked',
       'group.doing': 'In progress',
+      'group.scheduled': 'Scheduled',
       'group.done': 'Done',
       'group.missing': 'Missing card',
       'time.justNow': 'just now',
@@ -162,10 +192,11 @@ window.__ModuleLoader__.load({
     // ------------------------------------------------------------- variants
 
     // Muted accents that read on both light and dark backgrounds.
-    // Green = in progress, grey = finished.
+    // Green = in progress, grey = finished, light cyan = runs on a timer.
     const ACCENT = {
       blocked: '#c6545c',
       doing: '#12aa52',
+      scheduled: '#66b3c0',
       done: '#9aa1aa',
       missing: '#bfc4cb',
     }
@@ -344,6 +375,22 @@ window.__ModuleLoader__.load({
 
     const RANK = { blocked: 0, doing: 1, done: 2, missing: 3 }
 
+    // A Session that a scheduled task delivers into belongs to its own group.
+    function scheduledIdKey(result) {
+      const ids = new Set()
+      const value = result && result.ok ? result.value : null
+      const items = value && Array.isArray(value.items) ? value.items : []
+      for (const task of items) {
+        if (!task) continue
+        if (task.sessionId) ids.add(task.sessionId)
+        if (task.target && task.target.sessionId) ids.add(task.target.sessionId)
+        if (Array.isArray(task.involvedSessionIds)) {
+          task.involvedSessionIds.forEach(function (id) { if (id) ids.add(id) })
+        }
+      }
+      return Array.from(ids).sort().join('|')
+    }
+
     function compareRows(a, b) {
       const rank = (RANK[a.status] === undefined ? 9 : RANK[a.status]) - (RANK[b.status] === undefined ? 9 : RANK[b.status])
       if (rank !== 0) return rank
@@ -453,13 +500,51 @@ window.__ModuleLoader__.load({
 
       const atRef = React.useRef(LAST_AT)
 
-      // The done section opens only while the Session being viewed is itself
-      // done; in every other Session it stays collapsed unless toggled by hand.
+      // Sessions a scheduled task owns: they get their own quiet cyan group,
+      // whether the task targets them directly or only notifies them.
+      const [scheduledKey, setScheduledKey] = React.useState(null)
+      React.useEffect(function () {
+        let alive = true
+        if (!props.loadScheduled) {
+          setScheduledKey('')
+          return undefined
+        }
+        Promise.resolve(props.loadScheduled()).then(function (result) {
+          if (alive) setScheduledKey(scheduledIdKey(result))
+        }).catch(function () {
+          /* no access to the schedule: keep the plain groups */
+          if (alive) setScheduledKey('')
+        })
+        return function () { alive = false }
+      }, [tick, sessionId])
+      const scheduledLoaded = scheduledKey !== null
+      const scheduledSet = React.useMemo(function () {
+        return new Set(scheduledKey ? scheduledKey.split('|') : [])
+      }, [scheduledKey])
+
+      // A section opens only while the Session being viewed belongs to it: the
+      // scheduled group for a task target, the done group for a done card that
+      // is not scheduled (those live in the scheduled group instead). Both wait
+      // for the schedule lookup, so a done target never flashes the done group.
+      const currentScheduled = scheduledLoaded && scheduledSet.has(sessionId)
+      const [schedOverride, setSchedOverride] = React.useState(null)
+      const showScheduled = schedOverride === null ? currentScheduled : schedOverride
+      const toggleScheduled = function () { setSchedOverride(!showScheduled) }
+
       const currentRow = (state.rows || []).find(function (row) { return row.id === sessionId })
-      const currentDone = !!(currentRow && currentRow.status === 'done')
+      const currentDone = scheduledLoaded
+        && !!(currentRow && currentRow.status === 'done')
+        && !currentScheduled
       const [doneOverride, setDoneOverride] = React.useState(null)
       const showDone = doneOverride === null ? currentDone : doneOverride
       const toggleDone = function () { setDoneOverride(!showDone) }
+
+      const lastSidRef = React.useRef(sessionId)
+      if (lastSidRef.current !== sessionId) {
+        lastSidRef.current = sessionId
+        setDoneOverride(null)
+        setSchedOverride(null)
+      }
 
       React.useEffect(function () {
         if (!ready) return undefined
@@ -521,10 +606,21 @@ window.__ModuleLoader__.load({
       const now = Date.now()
       // Sessions without a card are not shown at all.
       const visibleRows = (state.rows || []).filter(function (row) { return row.status !== 'missing' })
-      const doneRows = visibleRows.filter(function (row) { return row.status === 'done' })
+      // A schedule target keeps its own group whatever its card says: the task,
+      // not the last turn, is what makes it interesting.
+      const scheduledRows = visibleRows.filter(function (row) {
+        return scheduledSet.has(row.id) && row.status !== 'blocked'
+      })
+      const doneRows = visibleRows.filter(function (row) {
+        return row.status === 'done' && !scheduledSet.has(row.id)
+      })
+      const doingRows = visibleRows.filter(function (row) {
+        return row.status === 'doing' && !scheduledSet.has(row.id)
+      })
       const groupDefs = [
         { key: 'blocked', label: t('group.blocked'), rows: visibleRows.filter(function (row) { return row.status === 'blocked' }) },
-        { key: 'doing', label: t('group.doing'), rows: visibleRows.filter(function (row) { return row.status === 'doing' }) },
+        { key: 'doing', label: t('group.doing'), rows: doingRows },
+        { key: 'scheduled', label: t('group.scheduled'), rows: showScheduled ? scheduledRows : [] },
         { key: 'done', label: t('group.done'), rows: showDone ? doneRows : [] },
       ]
 
@@ -538,15 +634,23 @@ window.__ModuleLoader__.load({
       } else {
         const children = []
         for (const group of groupDefs) {
-          // The done section keeps its toggle directly above the rows, so
-          // expanding it never hides the control below the fold.
-          if (group.key === 'done' && doneRows.length > 0) {
-            children.push(h('button', {
-              key: 'done-toggle',
-              type: 'button',
-              style: Object.assign({}, S.more, { marginTop: 14 }),
-              onClick: toggleDone,
-            }, (showDone ? t('ui.hideDone') : t('ui.showDone')) + ' · ' + doneRows.length))
+          // Collapsible sections keep their toggle directly above the rows, so
+          // expanding one never hides the control below the fold.
+          const collapsible = group.key === 'scheduled' || group.key === 'done'
+          if (collapsible) {
+            const isDone = group.key === 'done'
+            const count = isDone ? doneRows.length : scheduledRows.length
+            const shown = isDone ? showDone : showScheduled
+            if (count > 0) {
+              children.push(h('button', {
+                key: group.key + '-toggle',
+                type: 'button',
+                style: Object.assign({}, S.more, { marginTop: 14 }),
+                onClick: isDone ? toggleDone : toggleScheduled,
+              }, (shown
+                ? t(isDone ? 'ui.hideDone' : 'ui.hideScheduled')
+                : t(isDone ? 'ui.showDone' : 'ui.showScheduled')) + ' · ' + count))
+            }
           }
           if (group.rows.length === 0) continue
           const accent = ACCENT[group.key] || ACCENT.missing
@@ -653,7 +757,7 @@ window.__ModuleLoader__.load({
             // «进行中» and «已完成» need no label: the ring, the dot and the tint
             // already say it. Blocked keeps its label — it is the one thing that
             // needs words.
-            const showChip = V.chip && group.key === 'blocked'
+            const showChip = V.chip && (group.key === 'blocked' || group.key === 'scheduled')
             const statusChip = showChip ? h('span', { style: {
               flex: '0 0 auto',
               display: 'inline-flex',
@@ -698,11 +802,13 @@ window.__ModuleLoader__.load({
       }
 
       const heroParts = [visibleRows.length + ' ' + t('ui.count')]
-      const doingCount = visibleRows.filter(function (row) { return row.status === 'doing' }).length
-      const doneCount = visibleRows.filter(function (row) { return row.status === 'done' }).length
+      const doingCount = doingRows.length
+      const scheduledCount = scheduledRows.length
+      const doneCount = doneRows.length
       const blockedCount = visibleRows.filter(function (row) { return row.status === 'blocked' }).length
       if (blockedCount) heroParts.push(blockedCount + ' ' + t('group.blocked'))
       if (doingCount) heroParts.push(doingCount + ' ' + t('group.doing'))
+      if (scheduledCount) heroParts.push(scheduledCount + ' ' + t('group.scheduled'))
       if (doneCount) heroParts.push(doneCount + ' ' + t('group.done'))
       let heroMeta = heroParts.join(' · ')
       if (state.at) {
@@ -730,7 +836,7 @@ window.__ModuleLoader__.load({
 
     return {
       inject: [
-        'slots', 'locale', 'sidebarRightTabs', 'remote', 'remote.workspaceFiles', 'uiWorkspace',
+        'slots', 'locale', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.workspaceFiles', 'uiWorkspace',
       ],
       apply(ctx) {
         ctx.effect(function () { return ctx.locale.register(NS, { zh: zh, en: en }) }, 'context-recap-board: dictionaries')
@@ -745,9 +851,72 @@ window.__ModuleLoader__.load({
               order: 60,
               title: function () { return t('tab.title') },
               description: function () { return t('tab.description') },
+              icon: BoardGlyph,
             }],
           })
         }, 'context-recap-board: tab type')
+        if (ctx.sidebarRight && ctx.sidebarRight.mounted) {
+          const sidebar = ctx.sidebarRight
+          let cancelled = false
+          let lastSid
+          const timers = new Set()
+          const later = function (fn, ms) {
+            const id = setTimeout(function () { timers.delete(id); fn() }, ms)
+            timers.add(id)
+          }
+          const boardTab = function (sid) {
+            try {
+              const tabs = sidebar.openTabs && sidebar.openTabs.getSnapshot ? sidebar.openTabs.getSnapshot() : []
+              for (let i = 0; i < tabs.length; i += 1) {
+                if (tabs[i].sessionId === sid && tabs[i].kind === KIND) return tabs[i]
+              }
+            } catch (err) {
+              /* 库存还没就绪，当作未打开 */
+            }
+            return undefined
+          }
+          const ensure = function (sid, attempt) {
+            if (cancelled || !sid) return
+            try {
+              if (sidebar.mounted.getSnapshot() !== sid) return
+            } catch (err) {
+              return
+            }
+            const tab = boardTab(sid)
+            try {
+              if (tab) {
+                const active = sidebar.active()
+                if (!active || active.tabId !== tab.tabId) sidebar.focus(tab.tabId)
+                return
+              }
+              sidebar.openTab(KIND)
+            } catch (err) {
+              if (attempt < 5) later(function () { ensure(sid, attempt + 1) }, 120 + attempt * 140)
+            }
+          }
+          const sync = function () {
+            let sid
+            try { sid = sidebar.mounted.getSnapshot() } catch (err) { return }
+            if (!sid || sid === lastSid) return
+            lastSid = sid
+            ensure(sid, 0)
+          }
+          let stop
+          if (typeof sidebar.mounted.subscribe === 'function') stop = sidebar.mounted.subscribe(sync)
+          else {
+            const id = setInterval(sync, 600)
+            stop = function () { clearInterval(id) }
+          }
+          ctx.effect(function () {
+            return function () {
+              cancelled = true
+              if (typeof stop === 'function') stop()
+              timers.forEach(function (id) { clearTimeout(id) })
+              timers.clear()
+            }
+          }, 'context-recap-board: auto open')
+          sync()
+        }
         ctx.effect(function () {
           return ctx.slots.inject('sidebar.right.pane.tab', function () {
             return ctx.slots.register({
@@ -761,6 +930,18 @@ window.__ModuleLoader__.load({
                   },
                   openSession: function (id) {
                     if (ctx.uiWorkspace) ctx.uiWorkspace.openSession(id)
+                  },
+                  loadScheduled: function () {
+                    try {
+                      // Optional dependency: read it lazily so a profile without
+                      // the Schedule UI still gets the plain board.
+                      const remote = (typeof ctx.get === 'function' ? ctx.get('remote.schedule') : null)
+                        || (ctx.remote && ctx.remote.schedule)
+                      if (!remote || typeof remote.list !== 'function') return null
+                      return remote.list({ limit: 500 })
+                    } catch (error) {
+                      return null
+                    }
                   },
                 }
               },
