@@ -30,19 +30,6 @@ window.__ModuleLoader__.load({
     const CARD_CACHE = new Map()
     const CARD_TTL = 15000
     let LAST_AT = 0
-    // Persisted so switching Sessions (or a page reload) does not collapse the
-    // done section again.
-    const SHOW_DONE_KEY = 'contextRecapBoard.showDone'
-    let SHOW_DONE = false
-    try {
-      SHOW_DONE = window.localStorage.getItem(SHOW_DONE_KEY) === '1'
-    } catch (ignored) { SHOW_DONE = false }
-    function saveShowDone(value) {
-      SHOW_DONE = value
-      try {
-        window.localStorage.setItem(SHOW_DONE_KEY, value ? '1' : '0')
-      } catch (ignored) { /* storage may be unavailable */ }
-    }
 
     const zh = {
       'tab.title': '看板',
@@ -178,7 +165,7 @@ window.__ModuleLoader__.load({
     // Green = in progress, grey = finished.
     const ACCENT = {
       blocked: '#c6545c',
-      doing: '#6c9b83',
+      doing: '#12aa52',
       done: '#9aa1aa',
       missing: '#bfc4cb',
     }
@@ -453,11 +440,6 @@ window.__ModuleLoader__.load({
       const forceRef = React.useRef(0)
       const lastForceRef = React.useRef(0)
       const [hoverId, setHoverId] = React.useState(null)
-      const [showDone, setShowDone] = React.useState(SHOW_DONE)
-      const toggleDone = function () {
-        saveShowDone(!SHOW_DONE)
-        setShowDone(SHOW_DONE)
-      }
       const [state, setState] = React.useState(function () {
         // First paint must never be blank: reuse whatever is cached.
         return {
@@ -470,6 +452,14 @@ window.__ModuleLoader__.load({
       const V = LAYOUT
 
       const atRef = React.useRef(LAST_AT)
+
+      // The done section opens only while the Session being viewed is itself
+      // done; in every other Session it stays collapsed unless toggled by hand.
+      const currentRow = (state.rows || []).find(function (row) { return row.id === sessionId })
+      const currentDone = !!(currentRow && currentRow.status === 'done')
+      const [doneOverride, setDoneOverride] = React.useState(null)
+      const showDone = doneOverride === null ? currentDone : doneOverride
+      const toggleDone = function () { setDoneOverride(!showDone) }
 
       React.useEffect(function () {
         if (!ready) return undefined
@@ -660,8 +650,10 @@ window.__ModuleLoader__.load({
               }, row.title || row.id),
             )
             const curBadge = null
-            // «进行中» needs no label: the ring and the tint already say it.
-            const showChip = V.chip && group.key !== 'doing'
+            // «进行中» and «已完成» need no label: the ring, the dot and the tint
+            // already say it. Blocked keeps its label — it is the one thing that
+            // needs words.
+            const showChip = V.chip && group.key === 'blocked'
             const statusChip = showChip ? h('span', { style: {
               flex: '0 0 auto',
               display: 'inline-flex',
